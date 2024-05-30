@@ -22,22 +22,19 @@ class FaceRecognition:
         self.model = load_face_model(model_json_path, weights_path)
         self.database = database
         self.preprocess_database()
-        self.threshold = 1.0  # Nuevo umbral de distancia mínima
+        self.threshold = 1.0  
 
     def preprocess_image(self, image):
-        # Normalizar y expandir dimensiones de la imagen
         img_resized = np.around(np.array(image) / 255.0, decimals=12)
         x_train = np.expand_dims(img_resized, axis=0)
         embedding = self.model.predict_on_batch(x_train)
         return embedding / np.linalg.norm(embedding, ord=2)
 
     def preprocess_database(self):
-        # Preprocesar todas las imágenes en la base de datos
         for name, enc in self.database.items():
             self.database[name] = np.array(enc)
 
     def verify_identity(self, image):
-        # Verificar identidad usando la función que implementaste anteriormente
         encoding = self.preprocess_image(image)
         min_dist = float('inf')
         min_name = None
@@ -46,13 +43,12 @@ class FaceRecognition:
             if dist < min_dist:
                 min_dist = dist
                 min_name = name
-        st.write(f'Distancia mínima: {min_dist}')  # Agregar un registro de la distancia mínima
-        if min_dist < self.threshold:  # Comparar con el nuevo umbral
+        st.write(f'Distancia mínima: {min_dist}')  
+        if min_dist < self.threshold: 
             return min_name
         else:
             return None
 
-# Función para cargar la base de datos desde un archivo JSON
 def load_database(database_path):
     with open(database_path, 'r') as f:
         database = json.load(f)
@@ -82,12 +78,10 @@ def main():
                 if identity:
                     st.success(f'Bienvenido, {identity}!')
                 else:
-                    st.error('Lo siento, no se puede verificar la identidad.')
+                    st.error('Error: Imagen no identificada.')
 
-# Cargar la base de datos desde el archivo JSON
 database = load_database('database.json')
 
-# Crear una instancia de SimpleFaceRecognition con el modelo y la base de datos
 face_recognition = FaceRecognition('model/model.json', 'model/model.h5', database)
 
 # Ejecutar la aplicación
