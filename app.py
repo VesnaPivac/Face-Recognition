@@ -5,85 +5,78 @@ import json
 from tensorflow.keras.models import model_from_json
 import cv2
 
-
 # Función para cargar el modelo de reconocimiento facial
 @st.cache_resource
-def load_face_model(model_json_path, weights_path):
-    # Cargar el modelo desde un archivo JSON
+def load_model(model_json_path, weights_path):
     with open(model_json_path, 'r') as json_file:
         model_json = json_file.read()
     model = model_from_json(model_json)
-    # Cargar los pesos del modelo
     model.load_weights(weights_path)
     return model
 
 class FaceRecognition:
-    def __init__(self, model_json_path, weights_path, database):
-        self.model = load_face_model(model_json_path, weights_path)
-        self.database = database
-        self.preprocess_database()
-        self.threshold = 1.0  
+    def __init__(self, model_json_path, weights_path, database_path):
+        self.model = load_model(model_json_path, weights_path)
+        self.database = self.load_database(database_path)
+        self.threshold = 1.0  # Umbral para la verificación
+
+    def load_database(self, database_path):
+        with open(database_path, 'r') as f:
+            database = json.load(f)
+        return {name: np.array(encoding) for name, encoding in database.items()}
 
     def preprocess_image(self, image):
-        img_resized = np.around(np.array(image) / 255.0, decimals=12)
-        x_train = np.expand_dims(img_resized, axis=0)
-        embedding = self.model.predict_on_batch(x_train)
+        image = np.around(np.array(image) / 255.0, decimals=12)
+        image = np.expand_dims(image, axis=0)
+        embedding = self.model.predict_on_batch(image)
         return embedding / np.linalg.norm(embedding, ord=2)
-
-    def preprocess_database(self):
-        for name, enc in self.database.items():
-            self.database[name] = np.array(enc)
 
     def verify_identity(self, image):
         encoding = self.preprocess_image(image)
         min_dist = float('inf')
-        min_name = None
-        for name, enc in self.database.items():
-            dist = np.linalg.norm(encoding - enc)
+        identity = None
+
+        for name, db_enc in self.database.items():
+            dist = np.linalg.norm(encoding - db_enc)
             if dist < min_dist:
                 min_dist = dist
-                min_name = name
-        st.write(f'Distancia mínima: {min_dist}')  
-        if min_dist < self.threshold: 
-            return min_name
+                identity = name
+
+        st.write(f'Distancia mínima: {min_dist}')  # Registro de la distancia mínima
+        if min_dist < 0.7:
+            return identity
         else:
             return None
 
-def load_database(database_path):
-    with open(database_path, 'r') as f:
-        database = json.load(f)
-    return database
-
-# Crear una aplicación Streamlit
 def main():
-    st.title('Reconocimiento Facial')
+    st.title('Face Recognition')
 
-    captured_image = st.file_uploader('Cargar una imagen', type=['jpg', 'jpeg', 'png'])
+    # Interactividad: Cargar una imagen para el reconocimiento facial
+    st.subheader('Verificar Identidad:')
+    uploaded_image = st.file_uploader('Sube tu imagen', type=['jpg', 'jpeg', 'png'])
 
-    if captured_image:
-        img = Image.open(captured_image)
-        if img.mode == 'RGBA':
-            img = img.convert('RGB')
-        img_np = np.array(img)
+    if uploaded_image:
+        image = Image.open(uploaded_image).convert('RGB')
+        # Convertir la imagen PIL a un array NumPy
+        image_np = np.array(image)
 
-        # Redimensionar la imagen cargada al tamaño esperado por el modelo (160x160)
-        img_resized = cv2.resize(img_np, (160, 160))
+        # Cambiar el orden de los canales de color de RGB a BGR
+        image_np = image_np.transpose((1, 0, 2))
 
-        # Mostrar la imagen redimensionada
-        st.image(img_resized, caption='Imagen cargada y redimensionada', use_column_width=True)
+        # Redimensionar la imagen utilizando OpenCV
+        resized_image = cv2.resize(image_np, (160, 160))
+
+
+        st.image(resized_image, caption='Imagen cargada correctamente', use_column_width=True)
 
         if st.button('Verificar Identidad'):
             with st.spinner('Verificando...'):
-                identity = face_recognition.verify_identity(img_resized)
+                face_recognition = FaceRecognition('model/model.json', 'model/model.h5', 'database.json')
+                identity = face_recognition.verify_identity(resized_image)
                 if identity:
-                    st.success(f'Bienvenido, {identity}!')
+                    st.success(f'Bienvenido/a, {identity}!')
                 else:
-                    st.error('Error: Imagen no identificada.')
+                    st.error('Lo sentimos, no hemos podido confirmar tu identidad.')
 
-database = load_database('database.json')
-
-face_recognition = FaceRecognition('model/model.json', 'model/model.h5', database)
-
-# Ejecutar la aplicación
 if __name__ == '__main__':
     main()
